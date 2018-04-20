@@ -1576,7 +1576,7 @@ ngx_http_upstream_check_connect_handler(ngx_event_t *event)
     c->sendfile = 0;
     c->read->log = c->log;
     c->write->log = c->log;
-    c->pool = peer->pool;
+    c->pool = ngx_create_pool(ngx_pagesize, ngx_cycle->log);
 
 upstream_check_connect_done:
     peer->state = NGX_HTTP_CHECK_CONNECT_DONE;
@@ -3001,6 +3001,10 @@ ngx_http_upstream_check_clean_event(ngx_http_upstream_check_peer_t *peer)
         } else {
             ngx_close_connection(c);
             peer->pc.connection = NULL;
+            if (c->pool) {
+               ngx_destroy_pool(c->pool);
+               c->pool=NULL;
+            }
         }
     }
 
