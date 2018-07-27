@@ -85,6 +85,8 @@ typedef struct {
     ngx_uint_t                               busyness;
     ngx_uint_t                               access_count;
 
+    ngx_url_t                                url;
+
     ngx_uint_t                               checksum;
 
     struct sockaddr                         *sockaddr;
@@ -94,6 +96,9 @@ typedef struct {
     ngx_uint_t                               delete;
 
     ngx_atomic_t                             down;
+
+    ngx_uint_t                               do_dns_check;
+    ngx_uint_t                               dns_check_count;
 
     u_char                                   padding[64];
 } ngx_http_upstream_check_peer_shm_t;
@@ -129,11 +134,15 @@ struct ngx_http_upstream_check_peer_s {
     ngx_uint_t                               index;
     ngx_uint_t                               max_busy;
     ngx_str_t                               *upstream_name;
+    ngx_str_t                               *cfg_url;
     ngx_addr_t                              *check_peer_addr;
     ngx_addr_t                              *peer_addr;
+    ngx_addr_t                              *real_peer_addr;
     ngx_event_t                              check_ev;
     ngx_event_t                              check_timeout_ev;
     ngx_peer_connection_t                    pc;
+    ngx_peer_connection_t                    real_pc;
+    ngx_uint_t                               do_dns_check;
 
     void                                    *check_data;
     ngx_event_handler_pt                     send_handler;
@@ -147,6 +156,8 @@ struct ngx_http_upstream_check_peer_s {
     ngx_http_upstream_check_srv_conf_t      *conf;
 
     unsigned                                 delete;
+
+    ngx_http_upstream_server_t              *real_server;
 };
 
 
@@ -249,6 +260,8 @@ struct ngx_http_upstream_check_srv_conf_s {
 
     ngx_uint_t                               default_down;
     ngx_uint_t                               unique;
+
+    ngx_uint_t                               dns_check_count;
 };
 
 
@@ -816,6 +829,8 @@ ngx_http_upstream_check_add_peer(ngx_conf_t *cf,
     ngx_http_upstream_check_srv_conf_t   *ucscf;
     ngx_http_upstream_check_main_conf_t  *ucmcf;
 
+    ngx_http_upstream_server_t           *server;
+
     if (us->srv_conf == NULL) {
         return NGX_ERROR;
     }
@@ -856,6 +871,14 @@ ngx_http_upstream_check_add_peer(ngx_conf_t *cf,
     peer->conf = ucscf;
     peer->upstream_name = &us->host;
     peer->peer_addr = peer_addr;
+
+// Patch fo do_resolve START
+    server = us->servers->elts;
+    peer->do_dns_check = server[peer->index].do_resolve;
+    peer->cfg_url = &server[peer->index].name;
+    peer->real_peer_addr = server[peer->index].addrs;
+    peer->real_server = &server[peer->index];
+// Patch fo do_resolve STOP
 
     if (ucscf->port) {
         peer->check_peer_addr = ngx_pcalloc(cf->pool, sizeof(ngx_addr_t));
@@ -1306,6 +1329,17 @@ ngx_http_upstream_check_unique_peer(ngx_http_upstream_check_peers_t *peers,
     return NGX_ERROR;
 }
 
+
+ngx_addr_t *
+ngx_http_upstream_check_peer_addr(ngx_uint_t index)
+{
+    ngx_http_upstream_check_peer_t  *peer;
+
+    peer = check_peers_ctx->peers.elts;
+
+    return (peer[index].peer_addr);
+
+}
 
 ngx_uint_t
 ngx_http_upstream_check_peer_down(ngx_uint_t index)
@@ -2954,8 +2988,23 @@ ngx_http_upstream_check_status_update(ngx_http_upstream_check_peer_t *peer,
     if (result) {
         peer->shm->rise_count++;
         peer->shm->fall_count = 0;
+        peer->shm->dns_check_count = 0;
         if (peer->shm->down && peer->shm->rise_count >= ucscf->rise_count) {
             peer->shm->down = 0;
+// Patch for do_resolve START
+/*            if (peer->pc.connection != NULL) {
+                ngx_connection_t                    *c;
+                c = peer->pc.connection;
+                    ngx_close_connection(c);
+                    peer->pc.connection = NULL;
+            }
+            ngx_memzero(&peer->pc, sizeof(ngx_peer_connection_t));
+
+            peer->pc.sockaddr = peer->check_peer_addr->sockaddr;
+            peer->pc.socklen = peer->check_peer_addr->socklen;
+//          // NOT NEEDED //   peer->pc.name = &peer->check_peer_addr->name;
+*/
+// Patch for do_resolve STOP
             ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                           "enable check peer: %V ",
                           &peer->check_peer_addr->name);
@@ -2963,13 +3012,50 @@ ngx_http_upstream_check_status_update(ngx_http_upstream_check_peer_t *peer,
     } else {
         peer->shm->rise_count = 0;
         peer->shm->fall_count++;
+        peer->shm->dns_check_count++;
         if (!peer->shm->down && peer->shm->fall_count >= ucscf->fall_count) {
             peer->shm->down = 1;
             ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                           "disable check peer: %V ",
                           &peer->check_peer_addr->name);
         }
+// Patch for do_resolve START
+        if (peer->do_dns_check && peer->shm->down && ucscf->dns_check_count <= peer->shm->dns_check_count) {
+            peer->shm->dns_check_count = 0;
+            ngx_url_t  url_tt, url_for_resolve;
+            ngx_str_t   *s;
+
+            ngx_memzero(&url_for_resolve, sizeof(ngx_url_t));
+
+            url_for_resolve.url = *peer->cfg_url;
+
+            url_for_resolve.default_port = 80;
+
+            if (ngx_parse_url(ngx_cycle->pool, &url_for_resolve) != NGX_OK) {
+                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "Try resolve: %V=%V. ERR", peer->cfg_url, &url_for_resolve.url);
+            } else {
+                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "Try resolve: %V=%V. OK. init_upstream=%V START", peer->cfg_url, &url_for_resolve.url, peer->pc.name);
+
+                peer->peer_addr->sockaddr = url_for_resolve.addrs->sockaddr;
+                peer->peer_addr->socklen = url_for_resolve.addrs->socklen;
+                peer->peer_addr->name = url_for_resolve.addrs->name;
+
+                peer->shm->sockaddr = url_for_resolve.addrs->sockaddr;
+                peer->shm->socklen = url_for_resolve.addrs->socklen;
+
+                peer->real_server->addrs->sockaddr = url_for_resolve.addrs->sockaddr;
+                peer->real_server->addrs->socklen = url_for_resolve.addrs->socklen;
+                peer->real_server->addrs->name = url_for_resolve.addrs->name;
+
+                peer->check_peer_addr = url_for_resolve.addrs;
+                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "Try resolve: %V=%V. OK. init_upstream=%V STOP", peer->cfg_url, &url_for_resolve.url, peer->pc.name);
+
+            }
+
+        }
+    // Patch for do_resolve STOP
     }
+
 
     peer->shm->access_time = ngx_current_msec;
 
@@ -3339,12 +3425,14 @@ ngx_http_upstream_check_status_html_format(ngx_buf_t *b,
             "  <tr bgcolor=\"#C0C0C0\">\n"
             "    <th>Index</th>\n"
             "    <th>Upstream</th>\n"
-            "    <th>Name</th>\n"
+            "    <th>Cfg Name</th>\n"
+            "    <th>Address</th>\n"
             "    <th>Status</th>\n"
             "    <th>Rise counts</th>\n"
             "    <th>Fall counts</th>\n"
             "    <th>Check type</th>\n"
             "    <th>Check port</th>\n"
+            "    <th>DNS Check</th>\n"
             "  </tr>\n",
             count, ngx_http_upstream_check_shm_generation);
 
@@ -3372,21 +3460,25 @@ ngx_http_upstream_check_status_html_format(ngx_buf_t *b,
                 "    <td>%ui</td>\n"
                 "    <td>%V</td>\n"
                 "    <td>%V</td>\n"
+                "    <td>%V</td>\n"
                 "    <td>%s</td>\n"
                 "    <td>%ui</td>\n"
                 "    <td>%ui</td>\n"
                 "    <td>%V</td>\n"
                 "    <td>%ui</td>\n"
+                "    <td>%ui</td>\n"
                 "  </tr>\n",
                 peer[i].shm->down ? " bgcolor=\"#FF0000\"" : "",
                 i,
                 peer[i].upstream_name,
+                peer[i].cfg_url,
                 &peer[i].peer_addr->name,
                 peer[i].shm->down ? "down" : "up",
                 peer[i].shm->rise_count,
                 peer[i].shm->fall_count,
                 &peer[i].conf->check_type_conf->name,
-                peer[i].conf->port);
+                peer[i].conf->port,
+                peer[i].do_dns_check);
     }
 
     b->last = ngx_snprintf(b->last, b->end - b->last,
@@ -3424,15 +3516,17 @@ ngx_http_upstream_check_status_csv_format(ngx_buf_t *b,
         }
 
         b->last = ngx_snprintf(b->last, b->end - b->last,
-                "%ui,%V,%V,%s,%ui,%ui,%V,%ui\n",
+                "%ui,%V,%V,%V,%s,%ui,%ui,%V,%ui,%ui\n",
                 i,
                 peer[i].upstream_name,
+                peer[i].cfg_url,
                 &peer[i].peer_addr->name,
                 peer[i].shm->down ? "down" : "up",
                 peer[i].shm->rise_count,
                 peer[i].shm->fall_count,
                 &peer[i].conf->check_type_conf->name,
-                peer[i].conf->port);
+                peer[i].conf->port,
+                peer[i].do_dns_check);
     }
 }
 
@@ -3501,12 +3595,14 @@ ngx_http_upstream_check_status_json_format(ngx_buf_t *b,
         b->last = ngx_snprintf(b->last, b->end - b->last,
                 "    {\"index\": %ui, "
                 "\"upstream\": \"%V\", "
-                "\"name\": \"%V\", "
+                "\"cfgname\": \"%V\", "
+                "\"address\": \"%V\", "
                 "\"status\": \"%s\", "
                 "\"rise\": %ui, "
                 "\"fall\": %ui, "
                 "\"type\": \"%V\", "
-                "\"port\": %ui}"
+                "\"port\": %ui, "
+                "\"dnscheck\": %ui}"
                 "%s\n",
                 i,
                 peer[i].upstream_name,
@@ -3557,7 +3653,7 @@ static char *
 ngx_http_upstream_check(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_str_t                           *value, s;
-    ngx_uint_t                           i, port, rise, fall, default_down, unique;
+    ngx_uint_t                           i, port, rise, fall, default_down, unique, do_dns_check, dns_check_count;
     ngx_msec_t                           interval, timeout;
     ngx_check_conf_t                    *check;
     ngx_http_upstream_check_srv_conf_t  *ucscf;
@@ -3570,6 +3666,9 @@ ngx_http_upstream_check(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     timeout = 1000;
     default_down = 1;
     unique = 0;
+
+    dns_check_count = 10;
+    do_dns_check = 0;
 
     value = cf->args->elts;
 
@@ -3654,6 +3753,18 @@ ngx_http_upstream_check(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;
         }
 
+        if (ngx_strncmp(value[i].data, "dnscount=", 9) == 0) {
+            s.len = value[i].len - 9;
+            s.data = value[i].data + 9;
+
+            dns_check_count = ngx_atoi(s.data, s.len);
+            if (fall == (ngx_uint_t) NGX_ERROR || fall == 0) {
+                goto invalid_check_parameter;
+            }
+
+            continue;
+        }
+
         if (ngx_strncmp(value[i].data, "default_down=", 13) == 0) {
             s.len = value[i].len - 13;
             s.data = value[i].data + 13;
@@ -3702,6 +3813,7 @@ ngx_http_upstream_check(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ucscf->rise_count = rise;
     ucscf->default_down = default_down;
     ucscf->unique = unique;
+    ucscf->dns_check_count = dns_check_count;
 
     if (ucscf->check_type_conf == NGX_CONF_UNSET_PTR) {
         ngx_str_set(&s, "tcp");
@@ -4207,6 +4319,10 @@ ngx_http_upstream_check_init_srv_conf(ngx_conf_t *cf, void *conf)
         ucscf->check_timeout = 1000;
     }
 
+/*    if (ucscf->do_dns_check == NGX_CONF_UNSET_UINT) {
+        ucscf->do_dns_check = 1;
+    }
+*/
     if (ucscf->check_keepalive_requests == NGX_CONF_UNSET_UINT) {
         ucscf->check_keepalive_requests = 1;
     }
@@ -4556,6 +4672,8 @@ ngx_http_upstream_check_init_shm_peer(ngx_http_upstream_check_peer_shm_t *psh,
 
         psh->down         = opsh->down;
 
+        psh->dns_check_count   = opsh->dns_check_count;
+
     } else{
         psh->access_time  = 0;
         psh->access_count = 0;
@@ -4565,6 +4683,8 @@ ngx_http_upstream_check_init_shm_peer(ngx_http_upstream_check_peer_shm_t *psh,
         psh->busyness     = 0;
 
         psh->down         = init_down;
+
+        psh->dns_check_count = 0;
     }
 
     psh->owner = NGX_INVALID_PID;

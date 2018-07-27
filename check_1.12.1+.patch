@@ -1,6 +1,6 @@
 diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c nginx-1.12.1/src/http/modules/ngx_http_upstream_hash_module.c
---- nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c	2017-07-11 13:24:08.000000000 +0000
-+++ nginx-1.12.1/src/http/modules/ngx_http_upstream_hash_module.c	2017-07-13 17:58:44.687213233 +0000
+--- nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c	2017-10-17 16:16:37.000000000 +0300
++++ nginx-1.12.1/src/http/modules/ngx_http_upstream_hash_module.c	2018-07-27 16:27:51.000000000 +0300
 @@ -9,6 +9,9 @@
  #include <ngx_core.h>
  #include <ngx_http.h>
@@ -11,31 +11,77 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c ng
  
  typedef struct {
      uint32_t                            hash;
-@@ -235,6 +238,14 @@
+@@ -173,6 +176,10 @@
+     ngx_uint_t                    n, p;
+     ngx_http_upstream_rr_peer_t  *peer;
+ 
++#if (NGX_HTTP_UPSTREAM_CHECK)
++    ngx_addr_t                    *cfg_addr;
++#endif
++
+     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                    "get hash peer, try: %ui", pc->tries);
+ 
+@@ -235,6 +242,27 @@
              goto next;
          }
  
 +#if (NGX_HTTP_UPSTREAM_CHECK)
 +        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-+                       "get hash peer, check_index: %ui", peer->check_index);
++            "get hash peer, check_index: %ui",
++             peer->check_index);
 +        if (ngx_http_upstream_check_peer_down(peer->check_index)) {
 +            goto next;
 +        }
++
++        cfg_addr = ngx_http_upstream_check_peer_addr(peer->check_index);
++
++        if (ngx_cmp_sockaddr(peer->sockaddr, peer->socklen, cfg_addr->sockaddr, cfg_addr->socklen, 0) != NGX_OK) {
++            ngx_log_error(NGX_LOG_ERR, pc->log, 0,
++                           "changed real IP at \"%V\" upstream from %d to %d", &peer->name, peer->sockaddr, cfg_addr->sockaddr);
++            peer->sockaddr = cfg_addr->sockaddr;
++            peer->socklen = cfg_addr->socklen;
++            peer->name  = cfg_addr->name;
++
++        }
 +#endif
++
 +
          if (peer->max_fails
              && peer->fails >= peer->max_fails
              && now - peer->checked <= peer->fail_timeout)
-@@ -538,6 +549,15 @@
+@@ -498,6 +526,11 @@
+     ngx_http_upstream_chash_points_t   *points;
+     ngx_http_upstream_hash_srv_conf_t  *hcf;
+ 
++#if (NGX_HTTP_UPSTREAM_CHECK)
++    ngx_addr_t                    *cfg_addr;
++#endif
++
++
+     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                    "get consistent hash peer, try: %ui", pc->tries);
+ 
+@@ -538,6 +571,25 @@
                  continue;
              }
  
 +#if (NGX_HTTP_UPSTREAM_CHECK)
 +            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-+                           "get consistent_hash peer, check_index: %ui",
-+                           peer->check_index);
++                "get consistent_hash peer, check_index: %ui",
++                 peer->check_index);
 +            if (ngx_http_upstream_check_peer_down(peer->check_index)) {
 +                continue;
++            }
++            cfg_addr = ngx_http_upstream_check_peer_addr(peer->check_index);
++
++            if (ngx_cmp_sockaddr(peer->sockaddr, peer->socklen, cfg_addr->sockaddr, cfg_addr->socklen, 0) != NGX_OK) {
++                ngx_log_error(NGX_LOG_ERR, pc->log, 0,
++                           "changed real IP at \"%V\" upstream from %d to %d", &peer->name, peer->sockaddr, cfg_addr->sockaddr);
++                peer->sockaddr = cfg_addr->sockaddr;
++                peer->socklen = cfg_addr->socklen;
++                peer->name  = cfg_addr->name;
++
 +            }
 +#endif
 +
@@ -43,8 +89,8 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c ng
                  || ngx_strncmp(peer->server.data, server->data, server->len)
                     != 0)
 diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c nginx-1.12.1/src/http/modules/ngx_http_upstream_ip_hash_module.c
---- nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c	2017-07-11 13:24:08.000000000 +0000
-+++ nginx-1.12.1/src/http/modules/ngx_http_upstream_ip_hash_module.c	2017-07-13 17:59:48.205692500 +0000
+--- nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c	2017-10-17 16:16:37.000000000 +0300
++++ nginx-1.12.1/src/http/modules/ngx_http_upstream_ip_hash_module.c	2018-07-27 16:27:51.000000000 +0300
 @@ -9,6 +9,9 @@
  #include <ngx_core.h>
  #include <ngx_http.h>
@@ -55,7 +101,17 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c
  
  typedef struct {
      /* the round robin data must be first */
-@@ -205,6 +208,15 @@
+@@ -155,6 +158,9 @@
+     uintptr_t                     m;
+     ngx_uint_t                    i, n, p, hash;
+     ngx_http_upstream_rr_peer_t  *peer;
++#if (NGX_HTTP_UPSTREAM_CHECK)
++    ngx_addr_t                    *cfg_addr;
++#endif
+ 
+     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                    "get ip hash peer, try: %ui", pc->tries);
+@@ -205,6 +211,26 @@
              goto next;
          }
  
@@ -66,14 +122,25 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c
 +        if (ngx_http_upstream_check_peer_down(peer->check_index)) {
 +            goto next;
 +        }
++
++        cfg_addr = ngx_http_upstream_check_peer_addr(peer->check_index);
++
++        if (ngx_cmp_sockaddr(peer->sockaddr, peer->socklen, cfg_addr->sockaddr, cfg_addr->socklen, 0) != NGX_OK) {
++            ngx_log_error(NGX_LOG_ERR, pc->log, 0,
++                           "changed real IP at \"%V\" upstream from %d to %d", &peer->name, peer->sockaddr, cfg_addr->sockaddr);
++            peer->sockaddr = cfg_addr->sockaddr;
++            peer->socklen = cfg_addr->socklen;
++            peer->name  = cfg_addr->name;
++
++        }
 +#endif
 +
          if (peer->max_fails
              && peer->fails >= peer->max_fails
              && now - peer->checked <= peer->fail_timeout)
 diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_module.c nginx-1.12.1/src/http/modules/ngx_http_upstream_least_conn_module.c
---- nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_module.c	2017-07-11 13:24:08.000000000 +0000
-+++ nginx-1.12.1/src/http/modules/ngx_http_upstream_least_conn_module.c	2017-07-13 18:05:34.417398156 +0000
+--- nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_module.c	2017-10-17 16:16:37.000000000 +0300
++++ nginx-1.12.1/src/http/modules/ngx_http_upstream_least_conn_module.c	2018-07-27 16:27:51.000000000 +0300
 @@ -9,6 +9,10 @@
  #include <ngx_core.h>
  #include <ngx_http.h>
@@ -85,7 +152,17 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_modul
  
  static ngx_int_t ngx_http_upstream_init_least_conn_peer(ngx_http_request_t *r,
      ngx_http_upstream_srv_conf_t *us);
-@@ -147,6 +151,16 @@
+@@ -107,6 +111,9 @@
+     ngx_uint_t                     i, n, p, many;
+     ngx_http_upstream_rr_peer_t   *peer, *best;
+     ngx_http_upstream_rr_peers_t  *peers;
++#if (NGX_HTTP_UPSTREAM_CHECK)
++    ngx_addr_t                    *cfg_addr;
++#endif
+ 
+     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                    "get least conn peer, try: %ui", pc->tries);
+@@ -147,6 +154,27 @@
              continue;
          }
  
@@ -97,12 +174,23 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_modul
 +        if (ngx_http_upstream_check_peer_down(peer->check_index)) {
 +            continue;
 +        }
++
++        cfg_addr = ngx_http_upstream_check_peer_addr(peer->check_index);
++
++        if (ngx_cmp_sockaddr(peer->sockaddr, peer->socklen, cfg_addr->sockaddr, cfg_addr->socklen, 0) != NGX_OK) {
++            ngx_log_error(NGX_LOG_ERR, pc->log, 0,
++                           "changed real IP at \"%V\" upstream from %d to %d", &peer->name, peer->sockaddr, cfg_addr->sockaddr);
++            peer->sockaddr = cfg_addr->sockaddr;
++            peer->socklen = cfg_addr->socklen;
++            peer->name  = cfg_addr->name;
++
++        }
 +#endif
 +
          if (peer->max_fails
              && peer->fails >= peer->max_fails
              && now - peer->checked <= peer->fail_timeout)
-@@ -202,6 +216,16 @@
+@@ -202,6 +230,27 @@
                  continue;
              }
  
@@ -114,59 +202,209 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_modul
 +            if (ngx_http_upstream_check_peer_down(peer->check_index)) {
 +                continue;
 +            }
++
++            cfg_addr = ngx_http_upstream_check_peer_addr(peer->check_index);
++
++            if (ngx_cmp_sockaddr(peer->sockaddr, peer->socklen, cfg_addr->sockaddr, cfg_addr->socklen, 0) != NGX_OK) {
++                ngx_log_error(NGX_LOG_ERR, pc->log, 0,
++                           "changed real IP at \"%V\" upstream from %d to %d", &peer->name, peer->sockaddr, cfg_addr->sockaddr);
++                peer->sockaddr = cfg_addr->sockaddr;
++                peer->socklen = cfg_addr->socklen;
++                peer->name  = cfg_addr->name;
++
++            }
 +#endif
 +
              if (peer->conns * best->weight != best->conns * peer->weight) {
                  continue;
              }
+diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/ngx_http_upstream.c
+--- nginx-1.12.1_orig/src/http/ngx_http_upstream.c	2017-10-17 16:16:37.000000000 +0300
++++ nginx-1.12.1/src/http/ngx_http_upstream.c	2018-07-27 16:27:51.000000000 +0300
+@@ -462,6 +462,7 @@
+     { ngx_null_string, 0 }
+ };
+ 
++static ngx_str_t ngx_http_upstream_dynamic_server_null_route = ngx_string("127.255.255.255");
+ 
+ ngx_int_t
+ ngx_http_upstream_create(ngx_http_request_t *r)
+@@ -5634,7 +5635,8 @@
+                                          |NGX_HTTP_UPSTREAM_MAX_FAILS
+                                          |NGX_HTTP_UPSTREAM_FAIL_TIMEOUT
+                                          |NGX_HTTP_UPSTREAM_DOWN
+-                                         |NGX_HTTP_UPSTREAM_BACKUP);
++                                         |NGX_HTTP_UPSTREAM_BACKUP
++                                         |NGX_HTTP_UPSTREAM_DO_RESOLVE);
+     if (uscf == NULL) {
+         return NGX_CONF_ERROR;
+     }
+@@ -5731,8 +5733,8 @@
+ 
+     time_t                       fail_timeout;
+     ngx_str_t                   *value, s;
+-    ngx_url_t                    u;
+-    ngx_int_t                    weight, max_conns, max_fails;
++    ngx_url_t                    u, adsent_url;
++    ngx_int_t                    weight, max_conns, max_fails, do_resolve;
+     ngx_uint_t                   i;
+     ngx_http_upstream_server_t  *us;
+ 
+@@ -5749,6 +5751,7 @@
+     max_conns = 0;
+     max_fails = 1;
+     fail_timeout = 10;
++    do_resolve = 0;
+ 
+     for (i = 2; i < cf->args->nelts; i++) {
+ 
+@@ -5837,6 +5840,17 @@
+             continue;
+         }
+ 
++        if (ngx_strcmp(value[i].data, "resolve") == 0) {
++
++            if (!(uscf->flags & NGX_HTTP_UPSTREAM_DO_RESOLVE)) {
++                goto not_supported;
++            }
++
++            us->do_resolve = 1;
++
++            continue;
++        }
++
+         goto invalid;
+     }
+ 
+@@ -5846,6 +5860,11 @@
+     u.default_port = 80;
+ 
+     if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
++
++    if (us->do_resolve) {
++    /* Try without resolve */
++        u.no_resolve = 1;
++        if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
+         if (u.err) {
+             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                "%s in upstream \"%V\"", u.err, &u.url);
+@@ -5854,9 +5873,45 @@
+         return NGX_CONF_ERROR;
+     }
+ 
+-    us->name = u.url;
++        ngx_conf_log_error(NGX_LOG_WARN, cf, 0,
++                           "DNS fail in upstream \"%V\" - activated resolve functional", &u.url);
++
++        us->down = 1;
++
++        ngx_memzero(&adsent_url, sizeof(ngx_url_t));
++
++        adsent_url.url = ngx_http_upstream_dynamic_server_null_route;
++        adsent_url.default_port = 80;
++
++        if (ngx_parse_url(cf->pool, &adsent_url) != NGX_OK) {
++            if (u.err) {
++                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                                   "%s in upstream \"%V\" - at resolve functional", u.err, &u.url);
++            }
++            return NGX_CONF_ERROR;
++        }
++
++        us->addrs = adsent_url.addrs;
++        us->naddrs = adsent_url.naddrs;
++
++        } else {
++            if (u.err) {
++                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                                   "%s in upstream \"%V\"", u.err, &u.url);
++            }
++
++            return NGX_CONF_ERROR;
++        }
++    } else {
++        if ( us->do_resolve && ngx_inet_addr(u.host.data, u.host.len) != INADDR_NONE ) {
++            // Already ip address
++            us->do_resolve = 0;
++        }
+     us->addrs = u.addrs;
+     us->naddrs = u.naddrs;
++    }
++
++    us->name = u.url;
+     us->weight = weight;
+     us->max_conns = max_conns;
+     us->max_fails = max_fails;
+diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.h nginx-1.12.1/src/http/ngx_http_upstream.h
+--- nginx-1.12.1_orig/src/http/ngx_http_upstream.h	2017-10-17 16:16:37.000000000 +0300
++++ nginx-1.12.1/src/http/ngx_http_upstream.h	2018-07-27 16:27:51.000000000 +0300
+@@ -102,6 +102,8 @@
+     unsigned                         down:1;
+     unsigned                         backup:1;
+ 
++    unsigned                         do_resolve:1;
++
+     NGX_COMPAT_BEGIN(6)
+     NGX_COMPAT_END
+ } ngx_http_upstream_server_t;
+@@ -114,6 +116,7 @@
+ #define NGX_HTTP_UPSTREAM_DOWN          0x0010
+ #define NGX_HTTP_UPSTREAM_BACKUP        0x0020
+ #define NGX_HTTP_UPSTREAM_MAX_CONNS     0x0100
++#define NGX_HTTP_UPSTREAM_DO_RESOLVE    0x0200
+ 
+ 
+ struct ngx_http_upstream_srv_conf_s {
 diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12.1/src/http/ngx_http_upstream_round_robin.c
---- nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c	2017-07-11 13:24:09.000000000 +0000
-+++ nginx-1.12.1/src/http/ngx_http_upstream_round_robin.c	2017-07-13 18:13:00.510764315 +0000
-@@ -9,6 +9,10 @@
+--- nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c	2017-10-17 16:16:37.000000000 +0300
++++ nginx-1.12.1/src/http/ngx_http_upstream_round_robin.c	2018-07-27 16:27:51.000000000 +0300
+@@ -9,6 +9,9 @@
  #include <ngx_core.h>
  #include <ngx_http.h>
  
 +#if (NGX_HTTP_UPSTREAM_CHECK)
 +#include "ngx_http_upstream_check_module.h"
 +#endif
-+
  
  #define ngx_http_upstream_tries(p) ((p)->number                               \
                                      + ((p)->next ? (p)->next->number : 0))
-@@ -98,6 +102,15 @@
+@@ -97,7 +100,16 @@
+                 peer[n].fail_timeout = server[i].fail_timeout;
                  peer[n].down = server[i].down;
                  peer[n].server = server[i].name;
- 
+-
 +#if (NGX_HTTP_UPSTREAM_CHECK)
-+                if (!server[i].down) {
++                if (!server[i].down || server[i].do_resolve) {
++                    server[i].down = 0;
++                    peer[n].down = 0;
 +                    peer[n].check_index =
 +                        ngx_http_upstream_check_add_peer(cf, us, &server[i].addrs[j]);
 +                } else {
 +                    peer[n].check_index = (ngx_uint_t) NGX_ERROR;
 +                }
 +#endif
-+
                  *peerp = &peer[n];
                  peerp = &peer[n].next;
                  n++;
-@@ -162,6 +175,16 @@
+@@ -161,7 +173,16 @@
+                 peer[n].fail_timeout = server[i].fail_timeout;
                  peer[n].down = server[i].down;
                  peer[n].server = server[i].name;
- 
+-
 +#if (NGX_HTTP_UPSTREAM_CHECK)
-+                if (!server[i].down) {
++                if (!server[i].down || server[i].do_resolve) {
++                    server[i].down = 0;
++                    peer[n].down = 0;
 +                    peer[n].check_index =
 +                        ngx_http_upstream_check_add_peer(cf, us, &server[i].addrs[j]);
-+                }
-+                else {
++                } else {
 +                    peer[n].check_index = (ngx_uint_t) NGX_ERROR;
 +                }
 +#endif
-+
                  *peerp = &peer[n];
                  peerp = &peer[n].next;
                  n++;
-@@ -228,6 +251,9 @@
+@@ -228,6 +249,9 @@
          peer[i].max_conns = 0;
          peer[i].max_fails = 1;
          peer[i].fail_timeout = 10;
@@ -176,7 +414,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
          *peerp = &peer[i];
          peerp = &peer[i].next;
      }
-@@ -344,6 +370,9 @@
+@@ -344,6 +368,9 @@
          peer[0].max_conns = 0;
          peer[0].max_fails = 1;
          peer[0].fail_timeout = 10;
@@ -186,7 +424,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
          peers->peer = peer;
  
      } else {
-@@ -378,6 +407,9 @@
+@@ -378,6 +405,9 @@
              peer[i].max_conns = 0;
              peer[i].max_fails = 1;
              peer[i].fail_timeout = 10;
@@ -196,7 +434,18 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
              *peerp = &peer[i];
              peerp = &peer[i].next;
          }
-@@ -443,6 +475,12 @@
+@@ -423,6 +453,10 @@
+     ngx_http_upstream_rr_peer_t   *peer;
+     ngx_http_upstream_rr_peers_t  *peers;
+ 
++#if (NGX_HTTP_UPSTREAM_CHECK)
++    ngx_addr_t                    *cfg_addr;
++#endif
++
+     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                    "get rr peer, try: %ui", pc->tries);
+ 
+@@ -443,6 +477,22 @@
              goto failed;
          }
  
@@ -204,12 +453,22 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
 +        if (ngx_http_upstream_check_peer_down(peer->check_index)) {
 +            goto failed;
 +        }
++        cfg_addr = ngx_http_upstream_check_peer_addr(peer->check_index);
++
++        if (ngx_cmp_sockaddr(peer->sockaddr, peer->socklen, cfg_addr->sockaddr, cfg_addr->socklen, 0) != NGX_OK) {
++            ngx_log_error(NGX_LOG_ERR, pc->log, 0,
++                           "changed real IP at \"%V\" upstream from %d to %d", &peer->name, peer->sockaddr, cfg_addr->sockaddr);
++            peer->sockaddr = cfg_addr->sockaddr;
++            peer->socklen = cfg_addr->socklen;
++            peer->name  = cfg_addr->name;
++
++        }
 +#endif
 +
          rrp->current = peer;
  
      } else {
-@@ -537,6 +575,12 @@
+@@ -537,6 +587,12 @@
              continue;
          }
  
@@ -223,8 +482,8 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
              && peer->fails >= peer->max_fails
              && now - peer->checked <= peer->fail_timeout)
 diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.h nginx-1.12.1/src/http/ngx_http_upstream_round_robin.h
---- nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.h	2017-07-11 13:24:09.000000000 +0000
-+++ nginx-1.12.1/src/http/ngx_http_upstream_round_robin.h	2017-07-13 18:13:30.254055435 +0000
+--- nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.h	2017-10-17 16:16:37.000000000 +0300
++++ nginx-1.12.1/src/http/ngx_http_upstream_round_robin.h	2018-07-27 16:27:44.000000000 +0300
 @@ -38,6 +38,10 @@
      ngx_msec_t                      slow_start;
      ngx_msec_t                      start_time;
