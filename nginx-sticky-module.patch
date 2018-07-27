@@ -1,10 +1,8 @@
-Index: ngx_http_sticky_module.c
-===================================================================
---- ngx_http_sticky_module.c	(revision 45)
-+++ ngx_http_sticky_module.c	(working copy)
-@@ -10,6 +10,11 @@
+--- ngx_http_sticky_module.c.orig	2018-07-27 17:08:27.000000000 +0300
++++ ngx_http_sticky_module.c	2018-07-27 17:15:49.000000000 +0300
+@@ -15,6 +15,11 @@
+ #endif
  
- #include "ngx_http_sticky_misc.h"
  
 +#if (NGX_HTTP_UPSTREAM_CHECK)
 +#include "ngx_http_upstream_check_module.h"
@@ -14,7 +12,17 @@ Index: ngx_http_sticky_module.c
  /* define a peer */
  typedef struct {
  	ngx_http_upstream_rr_peer_t *rr_peer;
-@@ -287,6 +292,16 @@
+@@ -271,6 +276,9 @@ static ngx_int_t ngx_http_get_sticky_pee
+ 	uintptr_t                     m = 0;
+ 	ngx_uint_t                    n = 0, i;
+ 	ngx_http_upstream_rr_peer_t  *peer = NULL;
++#if (NGX_HTTP_UPSTREAM_CHECK)
++    ngx_addr_t                    *cfg_addr;
++#endif
+ 
+ 	ngx_log_debug(NGX_LOG_DEBUG_HTTP, pc->log, 0, "[sticky/get_sticky_peer] get sticky peer, try: %ui, n_peers: %ui, no_fallback: %ui/%ui", pc->tries, iphp->rrp.peers->number, conf->no_fallback, iphp->no_fallback);
+ 
+@@ -299,6 +307,27 @@ static ngx_int_t ngx_http_get_sticky_pee
  					return NGX_BUSY;
  				}
  
@@ -26,12 +34,23 @@ Index: ngx_http_sticky_module.c
 +                if (ngx_http_upstream_check_peer_down(peer->check_index)) {
 +					return NGX_BUSY;
 +                }
++
++                cfg_addr = ngx_http_upstream_check_peer_addr(peer->check_index);
++
++                if (ngx_cmp_sockaddr(peer->sockaddr, peer->socklen, cfg_addr->sockaddr, cfg_addr->socklen, 0) != NGX_OK) {
++                    ngx_log_error(NGX_LOG_ERR, pc->log, 0,
++                                   "changed real IP at \"%V\" upstream from %d to %d", &peer->name, peer->sockaddr, cfg_addr->sockaddr);
++                    peer->sockaddr = cfg_addr->sockaddr;
++                    peer->socklen = cfg_addr->socklen;
++                    peer->name  = cfg_addr->name;
++
++                }
 +#endif
 +
  				/* if it's been ignored for long enought (fail_timeout), reset timeout */
  				/* do this check before testing peer->fails ! :) */
  				if (now - peer->accessed > peer->fail_timeout) {
-@@ -303,6 +318,14 @@
+@@ -315,6 +344,25 @@ static ngx_int_t ngx_http_get_sticky_pee
  			/* ensure the peer is not marked as down */
  			if (!peer->down) {
  
@@ -41,12 +60,23 @@ Index: ngx_http_sticky_module.c
 +                               peer->check_index);
 +
 +                if (!ngx_http_upstream_check_peer_down(peer->check_index)) {
++
++                cfg_addr = ngx_http_upstream_check_peer_addr(peer->check_index);
++
++                if (ngx_cmp_sockaddr(peer->sockaddr, peer->socklen, cfg_addr->sockaddr, cfg_addr->socklen, 0) != NGX_OK) {
++                    ngx_log_error(NGX_LOG_ERR, pc->log, 0,
++                                   "changed real IP at \"%V\" upstream from %d to %d", &peer->name, peer->sockaddr, cfg_addr->sockaddr);
++                    peer->sockaddr = cfg_addr->sockaddr;
++                    peer->socklen = cfg_addr->socklen;
++                    peer->name  = cfg_addr->name;
++
++                }
 +#endif
 +
  				/* if it's not failedi, use it */
  				if (peer->max_fails == 0 || peer->fails < peer->max_fails) {
  					selected_peer = (ngx_int_t)n;
-@@ -317,6 +340,9 @@
+@@ -329,6 +377,9 @@ static ngx_int_t ngx_http_get_sticky_pee
  					/* mark the peer as tried */
  					iphp->rrp.tried[n] |= m;
  				}

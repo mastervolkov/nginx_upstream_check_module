@@ -1,4 +1,4 @@
-diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c nginx-1.12.1/src/http/modules/ngx_http_upstream_hash_module.c
+diff -burNp nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c nginx-1.12.1/src/http/modules/ngx_http_upstream_hash_module.c
 --- nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c	2017-10-17 16:16:37.000000000 +0300
 +++ nginx-1.12.1/src/http/modules/ngx_http_upstream_hash_module.c	2018-07-27 16:27:51.000000000 +0300
 @@ -9,6 +9,9 @@
@@ -11,7 +11,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c ng
  
  typedef struct {
      uint32_t                            hash;
-@@ -173,6 +176,10 @@
+@@ -173,6 +176,10 @@ ngx_http_upstream_get_hash_peer(ngx_peer
      ngx_uint_t                    n, p;
      ngx_http_upstream_rr_peer_t  *peer;
  
@@ -22,7 +22,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c ng
      ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
                     "get hash peer, try: %ui", pc->tries);
  
-@@ -235,6 +242,27 @@
+@@ -235,6 +242,27 @@ ngx_http_upstream_get_hash_peer(ngx_peer
              goto next;
          }
  
@@ -50,7 +50,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c ng
          if (peer->max_fails
              && peer->fails >= peer->max_fails
              && now - peer->checked <= peer->fail_timeout)
-@@ -498,6 +526,11 @@
+@@ -498,6 +526,11 @@ ngx_http_upstream_get_chash_peer(ngx_pee
      ngx_http_upstream_chash_points_t   *points;
      ngx_http_upstream_hash_srv_conf_t  *hcf;
  
@@ -62,7 +62,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c ng
      ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
                     "get consistent hash peer, try: %ui", pc->tries);
  
-@@ -538,6 +571,25 @@
+@@ -538,6 +571,25 @@ ngx_http_upstream_get_chash_peer(ngx_pee
                  continue;
              }
  
@@ -88,7 +88,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_hash_module.c ng
              if (peer->server.len != server->len
                  || ngx_strncmp(peer->server.data, server->data, server->len)
                     != 0)
-diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c nginx-1.12.1/src/http/modules/ngx_http_upstream_ip_hash_module.c
+diff -burNp nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c nginx-1.12.1/src/http/modules/ngx_http_upstream_ip_hash_module.c
 --- nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c	2017-10-17 16:16:37.000000000 +0300
 +++ nginx-1.12.1/src/http/modules/ngx_http_upstream_ip_hash_module.c	2018-07-27 16:27:51.000000000 +0300
 @@ -9,6 +9,9 @@
@@ -101,7 +101,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c
  
  typedef struct {
      /* the round robin data must be first */
-@@ -155,6 +158,9 @@
+@@ -155,6 +158,9 @@ ngx_http_upstream_get_ip_hash_peer(ngx_p
      uintptr_t                     m;
      ngx_uint_t                    i, n, p, hash;
      ngx_http_upstream_rr_peer_t  *peer;
@@ -111,7 +111,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c
  
      ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
                     "get ip hash peer, try: %ui", pc->tries);
-@@ -205,6 +211,26 @@
+@@ -205,6 +211,26 @@ ngx_http_upstream_get_ip_hash_peer(ngx_p
              goto next;
          }
  
@@ -138,7 +138,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_ip_hash_module.c
          if (peer->max_fails
              && peer->fails >= peer->max_fails
              && now - peer->checked <= peer->fail_timeout)
-diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_module.c nginx-1.12.1/src/http/modules/ngx_http_upstream_least_conn_module.c
+diff -burNp nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_module.c nginx-1.12.1/src/http/modules/ngx_http_upstream_least_conn_module.c
 --- nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_module.c	2017-10-17 16:16:37.000000000 +0300
 +++ nginx-1.12.1/src/http/modules/ngx_http_upstream_least_conn_module.c	2018-07-27 16:27:51.000000000 +0300
 @@ -9,6 +9,10 @@
@@ -152,7 +152,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_modul
  
  static ngx_int_t ngx_http_upstream_init_least_conn_peer(ngx_http_request_t *r,
      ngx_http_upstream_srv_conf_t *us);
-@@ -107,6 +111,9 @@
+@@ -107,6 +111,9 @@ ngx_http_upstream_get_least_conn_peer(ng
      ngx_uint_t                     i, n, p, many;
      ngx_http_upstream_rr_peer_t   *peer, *best;
      ngx_http_upstream_rr_peers_t  *peers;
@@ -162,7 +162,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_modul
  
      ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
                     "get least conn peer, try: %ui", pc->tries);
-@@ -147,6 +154,27 @@
+@@ -147,6 +154,27 @@ ngx_http_upstream_get_least_conn_peer(ng
              continue;
          }
  
@@ -190,7 +190,7 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_modul
          if (peer->max_fails
              && peer->fails >= peer->max_fails
              && now - peer->checked <= peer->fail_timeout)
-@@ -202,6 +230,27 @@
+@@ -202,6 +230,27 @@ ngx_http_upstream_get_least_conn_peer(ng
                  continue;
              }
  
@@ -218,10 +218,10 @@ diff -burN nginx-1.12.1_orig/src/http/modules/ngx_http_upstream_least_conn_modul
              if (peer->conns * best->weight != best->conns * peer->weight) {
                  continue;
              }
-diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/ngx_http_upstream.c
+diff -burNp nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/ngx_http_upstream.c
 --- nginx-1.12.1_orig/src/http/ngx_http_upstream.c	2017-10-17 16:16:37.000000000 +0300
 +++ nginx-1.12.1/src/http/ngx_http_upstream.c	2018-07-27 16:27:51.000000000 +0300
-@@ -462,6 +462,7 @@
+@@ -462,6 +462,7 @@ ngx_conf_bitmask_t  ngx_http_upstream_ig
      { ngx_null_string, 0 }
  };
  
@@ -229,7 +229,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/
  
  ngx_int_t
  ngx_http_upstream_create(ngx_http_request_t *r)
-@@ -5634,7 +5635,8 @@
+@@ -5634,7 +5635,8 @@ ngx_http_upstream(ngx_conf_t *cf, ngx_co
                                           |NGX_HTTP_UPSTREAM_MAX_FAILS
                                           |NGX_HTTP_UPSTREAM_FAIL_TIMEOUT
                                           |NGX_HTTP_UPSTREAM_DOWN
@@ -239,7 +239,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/
      if (uscf == NULL) {
          return NGX_CONF_ERROR;
      }
-@@ -5731,8 +5733,8 @@
+@@ -5731,8 +5733,8 @@ ngx_http_upstream_server(ngx_conf_t *cf,
  
      time_t                       fail_timeout;
      ngx_str_t                   *value, s;
@@ -250,7 +250,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/
      ngx_uint_t                   i;
      ngx_http_upstream_server_t  *us;
  
-@@ -5749,6 +5751,7 @@
+@@ -5749,6 +5751,7 @@ ngx_http_upstream_server(ngx_conf_t *cf,
      max_conns = 0;
      max_fails = 1;
      fail_timeout = 10;
@@ -258,7 +258,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/
  
      for (i = 2; i < cf->args->nelts; i++) {
  
-@@ -5837,6 +5840,17 @@
+@@ -5837,6 +5840,17 @@ ngx_http_upstream_server(ngx_conf_t *cf,
              continue;
          }
  
@@ -276,7 +276,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/
          goto invalid;
      }
  
-@@ -5846,6 +5860,11 @@
+@@ -5846,6 +5860,11 @@ ngx_http_upstream_server(ngx_conf_t *cf,
      u.default_port = 80;
  
      if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
@@ -288,7 +288,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/
          if (u.err) {
              ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                                 "%s in upstream \"%V\"", u.err, &u.url);
-@@ -5854,9 +5873,45 @@
+@@ -5854,9 +5873,45 @@ ngx_http_upstream_server(ngx_conf_t *cf,
          return NGX_CONF_ERROR;
      }
  
@@ -335,10 +335,10 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http/
      us->weight = weight;
      us->max_conns = max_conns;
      us->max_fails = max_fails;
-diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.h nginx-1.12.1/src/http/ngx_http_upstream.h
+diff -burNp nginx-1.12.1_orig/src/http/ngx_http_upstream.h nginx-1.12.1/src/http/ngx_http_upstream.h
 --- nginx-1.12.1_orig/src/http/ngx_http_upstream.h	2017-10-17 16:16:37.000000000 +0300
 +++ nginx-1.12.1/src/http/ngx_http_upstream.h	2018-07-27 16:27:51.000000000 +0300
-@@ -102,6 +102,8 @@
+@@ -102,6 +102,8 @@ typedef struct {
      unsigned                         down:1;
      unsigned                         backup:1;
  
@@ -347,7 +347,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.h nginx-1.12.1/src/http/
      NGX_COMPAT_BEGIN(6)
      NGX_COMPAT_END
  } ngx_http_upstream_server_t;
-@@ -114,6 +116,7 @@
+@@ -114,6 +116,7 @@ typedef struct {
  #define NGX_HTTP_UPSTREAM_DOWN          0x0010
  #define NGX_HTTP_UPSTREAM_BACKUP        0x0020
  #define NGX_HTTP_UPSTREAM_MAX_CONNS     0x0100
@@ -355,7 +355,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream.h nginx-1.12.1/src/http/
  
  
  struct ngx_http_upstream_srv_conf_s {
-diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12.1/src/http/ngx_http_upstream_round_robin.c
+diff -burNp nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12.1/src/http/ngx_http_upstream_round_robin.c
 --- nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c	2017-10-17 16:16:37.000000000 +0300
 +++ nginx-1.12.1/src/http/ngx_http_upstream_round_robin.c	2018-07-27 16:27:51.000000000 +0300
 @@ -9,6 +9,9 @@
@@ -368,7 +368,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
  
  #define ngx_http_upstream_tries(p) ((p)->number                               \
                                      + ((p)->next ? (p)->next->number : 0))
-@@ -97,7 +100,16 @@
+@@ -97,7 +100,16 @@ ngx_http_upstream_init_round_robin(ngx_c
                  peer[n].fail_timeout = server[i].fail_timeout;
                  peer[n].down = server[i].down;
                  peer[n].server = server[i].name;
@@ -386,7 +386,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
                  *peerp = &peer[n];
                  peerp = &peer[n].next;
                  n++;
-@@ -161,7 +173,16 @@
+@@ -161,7 +173,16 @@ ngx_http_upstream_init_round_robin(ngx_c
                  peer[n].fail_timeout = server[i].fail_timeout;
                  peer[n].down = server[i].down;
                  peer[n].server = server[i].name;
@@ -404,7 +404,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
                  *peerp = &peer[n];
                  peerp = &peer[n].next;
                  n++;
-@@ -228,6 +249,9 @@
+@@ -228,6 +249,9 @@ ngx_http_upstream_init_round_robin(ngx_c
          peer[i].max_conns = 0;
          peer[i].max_fails = 1;
          peer[i].fail_timeout = 10;
@@ -414,7 +414,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
          *peerp = &peer[i];
          peerp = &peer[i].next;
      }
-@@ -344,6 +368,9 @@
+@@ -344,6 +368,9 @@ ngx_http_upstream_create_round_robin_pee
          peer[0].max_conns = 0;
          peer[0].max_fails = 1;
          peer[0].fail_timeout = 10;
@@ -424,7 +424,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
          peers->peer = peer;
  
      } else {
-@@ -378,6 +405,9 @@
+@@ -378,6 +405,9 @@ ngx_http_upstream_create_round_robin_pee
              peer[i].max_conns = 0;
              peer[i].max_fails = 1;
              peer[i].fail_timeout = 10;
@@ -434,7 +434,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
              *peerp = &peer[i];
              peerp = &peer[i].next;
          }
-@@ -423,6 +453,10 @@
+@@ -423,6 +453,10 @@ ngx_http_upstream_get_round_robin_peer(n
      ngx_http_upstream_rr_peer_t   *peer;
      ngx_http_upstream_rr_peers_t  *peers;
  
@@ -445,7 +445,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
      ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
                     "get rr peer, try: %ui", pc->tries);
  
-@@ -443,6 +477,22 @@
+@@ -443,6 +477,22 @@ ngx_http_upstream_get_round_robin_peer(n
              goto failed;
          }
  
@@ -468,7 +468,7 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
          rrp->current = peer;
  
      } else {
-@@ -537,6 +587,12 @@
+@@ -537,6 +587,12 @@ ngx_http_upstream_get_peer(ngx_http_upst
              continue;
          }
  
@@ -481,10 +481,10 @@ diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.c nginx-1.12
          if (peer->max_fails
              && peer->fails >= peer->max_fails
              && now - peer->checked <= peer->fail_timeout)
-diff -burN nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.h nginx-1.12.1/src/http/ngx_http_upstream_round_robin.h
+diff -burNp nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.h nginx-1.12.1/src/http/ngx_http_upstream_round_robin.h
 --- nginx-1.12.1_orig/src/http/ngx_http_upstream_round_robin.h	2017-10-17 16:16:37.000000000 +0300
 +++ nginx-1.12.1/src/http/ngx_http_upstream_round_robin.h	2018-07-27 16:27:44.000000000 +0300
-@@ -38,6 +38,10 @@
+@@ -38,6 +38,10 @@ struct ngx_http_upstream_rr_peer_s {
      ngx_msec_t                      slow_start;
      ngx_msec_t                      start_time;
  
