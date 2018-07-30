@@ -3022,8 +3022,8 @@ ngx_http_upstream_check_status_update(ngx_http_upstream_check_peer_t *peer,
 // Patch for do_resolve START
         if (peer->do_dns_check && peer->shm->down && ucscf->dns_check_count <= peer->shm->dns_check_count) {
             peer->shm->dns_check_count = 0;
-            ngx_url_t  url_tt, url_for_resolve;
-            ngx_str_t   *s;
+            ngx_url_t  url_for_resolve;
+            // ngx_str_t   *s;
 
             ngx_memzero(&url_for_resolve, sizeof(ngx_url_t));
 
