@@ -276,43 +276,48 @@ diff -burNp nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http
          goto invalid;
      }
  
-@@ -5846,6 +5860,11 @@ ngx_http_upstream_server(ngx_conf_t *cf,
+@@ -5846,17 +5860,58 @@ ngx_http_upstream_server(ngx_conf_t *cf,
      u.default_port = 80;
  
      if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
-+
-+    if (us->do_resolve) {
-+    /* Try without resolve */
-+        u.no_resolve = 1;
-+        if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
-         if (u.err) {
-             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                                "%s in upstream \"%V\"", u.err, &u.url);
-@@ -5854,9 +5873,45 @@ ngx_http_upstream_server(ngx_conf_t *cf,
-         return NGX_CONF_ERROR;
-     }
+-        if (u.err) {
+-            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+-                               "%s in upstream \"%V\"", u.err, &u.url);
+-        }
  
--    us->name = u.url;
-+        ngx_conf_log_error(NGX_LOG_WARN, cf, 0,
-+                           "DNS fail in upstream \"%V\" - activated resolve functional", &u.url);
+-        return NGX_CONF_ERROR;
++        if (us->do_resolve) {
++        /* Try without resolve */
++            u.no_resolve = 1;
++            if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
++                if (u.err) {
++                    ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                                       "%s in upstream \"%V\"", u.err, &u.url);
++                }
 +
-+        us->down = 1;
-+
-+        ngx_memzero(&adsent_url, sizeof(ngx_url_t));
-+
-+        adsent_url.url = ngx_http_upstream_dynamic_server_null_route;
-+        adsent_url.default_port = 80;
-+
-+        if (ngx_parse_url(cf->pool, &adsent_url) != NGX_OK) {
-+            if (u.err) {
-+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-+                                   "%s in upstream \"%V\" - at resolve functional", u.err, &u.url);
++                return NGX_CONF_ERROR;
 +            }
-+            return NGX_CONF_ERROR;
-+        }
 +
-+        us->addrs = adsent_url.addrs;
-+        us->naddrs = adsent_url.naddrs;
++            ngx_conf_log_error(NGX_LOG_WARN, cf, 0,
++                               "DNS fail in upstream \"%V\" - activated resolve functional", &u.url);
++
++            us->down = 1;
++
++            ngx_memzero(&adsent_url, sizeof(ngx_url_t));
++
++            adsent_url.url = ngx_http_upstream_dynamic_server_null_route;
++            adsent_url.default_port = 80;
++
++            if (ngx_parse_url(cf->pool, &adsent_url) != NGX_OK) {
++                if (u.err) {
++                    ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                                       "%s in upstream \"%V\" - at resolve functional", u.err, &u.url);
++                }
++                return NGX_CONF_ERROR;
++            }
++
++            us->addrs = adsent_url.addrs;
++            us->naddrs = adsent_url.naddrs;
 +
 +        } else {
 +            if (u.err) {
@@ -327,11 +332,13 @@ diff -burNp nginx-1.12.1_orig/src/http/ngx_http_upstream.c nginx-1.12.1/src/http
 +            // Already ip address
 +            us->do_resolve = 0;
 +        }
-     us->addrs = u.addrs;
-     us->naddrs = u.naddrs;
-+    }
-+
-+    us->name = u.url;
++        us->addrs = u.addrs;
++        us->naddrs = u.naddrs;
+     }
+ 
+     us->name = u.url;
+-    us->addrs = u.addrs;
+-    us->naddrs = u.naddrs;
      us->weight = weight;
      us->max_conns = max_conns;
      us->max_fails = max_fails;
